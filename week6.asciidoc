@@ -1,0 +1,354 @@
++*In[11]:*+
+[source, ipython3]
+----
+%%writefile testutility.py
+import logging
+import os
+import subprocess
+import yaml
+import pandas as pd
+import datetime 
+import gc
+import re
+
+def read_config_file(filepath):
+    with open(filepath, 'r') as stream:
+        try:
+            return yaml.safe_load(stream)
+        except yaml.YAMLError as exc:
+            logging.error(exc)
+
+
+def replacer(string, char):
+    pattern = char + '{2,}'
+    string = re.sub(pattern, char, string) 
+    return string
+
+def col_header_val(df,table_config):
+    '''
+    replace whitespaces in the column
+    and standardized column names
+    '''
+    df.columns = df.columns.str.lower()
+    df.columns = df.columns.str.replace('[^\w]','_',regex=True)
+    df.columns = list(map(lambda x: x.strip('_'), list(df.columns)))
+    df.columns = list(map(lambda x: replacer(x,'_'), list(df.columns)))
+    expected_col = list(map(lambda x: x.lower(),  table_config['columns']))
+    expected_col.sort()
+    df.columns =list(map(lambda x: x.lower(), list(df.columns)))
+    df = df.reindex(sorted(df.columns), axis=1)
+    if len(df.columns) == len(expected_col) and list(expected_col)  == list(df.columns):
+        print("column name and column length validation passed")
+        return 1
+    else:
+        print("column name and column length validation failed")
+        mismatched_columns_file = list(set(df.columns).difference(expected_col))
+        print("Following File columns are not in the YAML file",mismatched_columns_file)
+        missing_YAML_file = list(set(expected_col).difference(df.columns))
+        print("Following YAML columns are not in the file uploaded",missing_YAML_file)
+        logging.info(f'df columns: {df.columns}')
+        logging.info(f'expected columns: {expected_col}')
+        return 0
+----
+
+
++*Out[11]:*+
+----
+Overwriting testutility.py
+----
+
+
++*In[52]:*+
+[source, ipython3]
+----
+%%writefile file.yaml
+file_type: csv
+dataset_name: testfile
+file_name: Salary_Data
+table_name: edsurv
+inbound_delimiter: ","
+outbound_delimiter: "|"
+skip_leading_rows: 1
+columns: 
+    - YearsExperience
+    - Salary
+    
+----
+
+
++*Out[52]:*+
+----
+Overwriting file.yaml
+----
+
+
++*In[53]:*+
+[source, ipython3]
+----
+import testutility as util
+config_data = util.read_config_file("file.yaml")
+----
+
+
++*In[54]:*+
+[source, ipython3]
+----
+config_data['inbound_delimiter']
+----
+
+
++*Out[54]:*+
+----','----
+
+
++*In[55]:*+
+[source, ipython3]
+----
+config_data
+----
+
+
++*Out[55]:*+
+----{'file_type': 'csv',
+ 'dataset_name': 'testfile',
+ 'file_name': 'Salary_Data',
+ 'table_name': 'edsurv',
+ 'inbound_delimiter': ',',
+ 'outbound_delimiter': '|',
+ 'skip_leading_rows': 1,
+ 'columns': ['YearsExperience', 'Salary']}----
+
+
++*In[56]:*+
+[source, ipython3]
+----
+import pandas as pd
+df_sample = pd.read_csv("Salary_Data.csv",delimiter=',')
+df_sample.head()
+----
+
+
++*Out[56]:*+
+----
+[cols=",,",options="header",]
+|=========================
+| |YearsExperience |Salary
+|0 |1.1 |39343.0
+|1 |1.3 |46205.0
+|2 |1.5 |37731.0
+|3 |2.0 |43525.0
+|4 |2.2 |39891.0
+|=========================
+----
+
+
++*In[57]:*+
+[source, ipython3]
+----
+file_type = config_data['file_type']
+source_file = "./" + config_data['file_name'] + f'.{file_type}'
+df = pd.read_csv(source_file,config_data['inbound_delimiter'])
+df.head()
+----
+
+
++*Out[57]:*+
+----
+C:\Users\Suhas\anaconda3\lib\site-packages\IPython\core\interactiveshell.py:3331: FutureWarning: In a future version of pandas all arguments of read_csv except for the argument 'filepath_or_buffer' will be keyword-only
+  exec(code_obj, self.user_global_ns, self.user_ns)
+
+[cols=",,",options="header",]
+|=========================
+| |YearsExperience |Salary
+|0 |1.1 |39343.0
+|1 |1.3 |46205.0
+|2 |1.5 |37731.0
+|3 |2.0 |43525.0
+|4 |2.2 |39891.0
+|=========================
+----
+
+
++*In[58]:*+
+[source, ipython3]
+----
+util.col_header_val(df,config_data)
+----
+
+
++*Out[58]:*+
+----
+column name and column length validation passed
+1----
+
+
++*In[59]:*+
+[source, ipython3]
+----
+print("columns of files are:" ,df.columns)
+print("columns of YAML are:" ,config_data['columns'])
+----
+
+
++*Out[59]:*+
+----
+columns of files are: Index(['yearsexperience', 'salary'], dtype='object')
+columns of YAML are: ['YearsExperience', 'Salary']
+----
+
+
++*In[60]:*+
+[source, ipython3]
+----
+if util.col_header_val(df,config_data)==0:
+    print("validation failed")
+else:
+    print("col validation passed")
+----
+
+
++*Out[60]:*+
+----
+column name and column length validation passed
+col validation passed
+----
+
+
++*In[62]:*+
+[source, ipython3]
+----
+pd.read_csv("./Salary_Data.csv")
+----
+
+
++*Out[62]:*+
+----
+[cols=",,",options="header",]
+|=========================
+| |YearsExperience |Salary
+|0 |1.1 |39343.0
+|1 |1.3 |46205.0
+|2 |1.5 |37731.0
+|3 |2.0 |43525.0
+|4 |2.2 |39891.0
+|5 |2.9 |56642.0
+|6 |3.0 |60150.0
+|7 |3.2 |54445.0
+|8 |3.2 |64445.0
+|9 |3.7 |57189.0
+|10 |3.9 |63218.0
+|11 |4.0 |55794.0
+|12 |4.0 |56957.0
+|13 |4.1 |57081.0
+|14 |4.5 |61111.0
+|15 |4.9 |67938.0
+|16 |5.1 |66029.0
+|17 |5.3 |83088.0
+|18 |5.9 |81363.0
+|19 |6.0 |93940.0
+|20 |6.8 |91738.0
+|21 |7.1 |98273.0
+|22 |7.9 |101302.0
+|23 |8.2 |113812.0
+|24 |8.7 |109431.0
+|25 |9.0 |105582.0
+|26 |9.5 |116969.0
+|27 |9.6 |112635.0
+|28 |10.3 |122391.0
+|29 |10.5 |121872.0
+|=========================
+----
+
+
++*In[63]:*+
+[source, ipython3]
+----
+df
+----
+
+
++*Out[63]:*+
+----
+[cols=",,",options="header",]
+|=========================
+| |yearsexperience |salary
+|0 |1.1 |39343.0
+|1 |1.3 |46205.0
+|2 |1.5 |37731.0
+|3 |2.0 |43525.0
+|4 |2.2 |39891.0
+|5 |2.9 |56642.0
+|6 |3.0 |60150.0
+|7 |3.2 |54445.0
+|8 |3.2 |64445.0
+|9 |3.7 |57189.0
+|10 |3.9 |63218.0
+|11 |4.0 |55794.0
+|12 |4.0 |56957.0
+|13 |4.1 |57081.0
+|14 |4.5 |61111.0
+|15 |4.9 |67938.0
+|16 |5.1 |66029.0
+|17 |5.3 |83088.0
+|18 |5.9 |81363.0
+|19 |6.0 |93940.0
+|20 |6.8 |91738.0
+|21 |7.1 |98273.0
+|22 |7.9 |101302.0
+|23 |8.2 |113812.0
+|24 |8.7 |109431.0
+|25 |9.0 |105582.0
+|26 |9.5 |116969.0
+|27 |9.6 |112635.0
+|28 |10.3 |122391.0
+|29 |10.5 |121872.0
+|=========================
+----
+
+
++*In[64]:*+
+[source, ipython3]
+----
+Salary_data = {
+    'YearsExperience' : ['13.7', '15', '15.8','18'],
+    'Salary' : ['131782.0','141265.0','141765.0','171980.0']
+}
+import pandas as pd
+df = pd.DataFrame(testdata, columns=['YearsExperience', 'Salary'])
+df.to_csv("Salary_Data.csv",index=False)
+----
+
+
++*In[68]:*+
+[source, ipython3]
+----
+df
+----
+
+
++*Out[68]:*+
+----
+[cols=",,",options="header",]
+|=========================
+| |YearsExperience |Salary
+|=========================
+----
+
+
++*In[69]:*+
+[source, ipython3]
+----
+Salary_data
+----
+
+
++*Out[69]:*+
+----{'YearsExperience': ['13.7', '15', '15.8', '18'],
+ 'Salary': ['131782.0', '141265.0', '141765.0', '171980.0']}----
+
+
++*In[ ]:*+
+[source, ipython3]
+----
+
+----
